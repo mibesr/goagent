@@ -138,7 +138,8 @@ class Common(object):
         print '--------------------------------------------'
         print 'HTTPS Enabled: Yes'
         print 'Listen Addr  : %s:%d' % (self.LISTEN_IP, self.LISTEN_PORT)
-        print 'Local Proxy  : %s' % (self.GAE_PROXY if self.GAE_PROXY else 'Disabled')
+        if self.GAE_PROXY:
+            print 'Local Proxy  : %s' % self.GAE_PROXY
         print 'GAE Servers  : %s' % self.GAE_SERVERS
         print 'GAE IP       : %s%s' % (self.GAE_IP, '' if self.GAE_VERIFY else ' (NOT Verify)')
         print '--------------------------------------------'
@@ -284,7 +285,7 @@ def gae_encode_data(dic):
 def gae_decode_data(qs):
     return dict((k, v.decode('hex')) for k, v in (x.split('=') for x in qs.split('&')))
 
-def build_openner():
+def build_opener():
     opener = urllib2.build_opener()
     if not common.GAE_PROXY:
         opener.add_handler(urllib2.ProxyHandler({}))
@@ -318,7 +319,8 @@ class GaeFetcher(BaseFetcher):
                 request = urllib2.Request(gae_server, params)
                 request.add_header('Host', gae_host)
                 request.add_header('Content-Type', 'application/octet-stream')
-                response = build_openner().open(request)
+                proxy_handler = urllib2.ProxyHandler(common.GAE_PROXY)
+                response = urllib2.build_opener(proxy_handler).open(request)
                 data = response.read()
                 response.close()
             except urllib2.HTTPError, e:
