@@ -82,7 +82,7 @@ class Common(object):
             except RuntimeError, e:
                 logging.exception('Common.select_gae_ip failed: %s, try switch to https mode.\n' % str(e))
                 self.GAE_PREFER = 'https'
-                self.select_gae_ip(1)
+                self.select_gae_ip(0 if common.GAE_PROXY else 1)
 
     def select_gae_ip(self, verify):
         '''select a available fetch server ip from proxy.ini ip list'''
@@ -323,7 +323,7 @@ class GaeFetcher(BaseFetcher):
                 if selected:
                     self.handler.log_message('_fetch errors(%r), common.select_gae_ip(1) again' % selected)
                     common.GAE_PREFER = 'https'
-                    common.select_gae_ip(1)
+                    common.select_gae_ip(0 if common.GAE_PROXY else 1)
                     common.show()
             # something wrong, continue to fetch again
             if continued:
