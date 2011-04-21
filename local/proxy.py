@@ -326,6 +326,7 @@ class GaeFetcher(BaseFetcher):
             except urllib2.HTTPError, e:
                 # www.google.cn:80 is down, set selected to trigger common.select_gae_ip(1)
                 if e.code == 502:
+                    common.GAE_PREFER = 'https'
                     selected = str(e)
                 errors.append('%d: %s' % (e.code, httplib.responses.get(e.code, 'Unknown HTTPError')))
                 continued = 1
@@ -342,7 +343,6 @@ class GaeFetcher(BaseFetcher):
                 # fetch server down, select another server
                 if selected:
                     self.handler.log_message('_fetch errors(%r), common.select_gae_ip(1) again' % selected)
-                    common.GAE_PREFER = 'https'
                     common.select_gae_ip(0 if common.GAE_PROXY else 1)
                     common.show()
             # something wrong, continue to fetch again
