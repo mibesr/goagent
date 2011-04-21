@@ -28,7 +28,8 @@ class RandomTCPConnection(object):
         if len(hosts) > RandomTCPConnection.CONNECT_COUNT:
             hosts = random.Random().sample(hosts, RandomTCPConnection.CONNECT_COUNT)
         for host in hosts:
-            soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            soc_family = socket.AF_INET if '.' in host else socket.AF_INET6
+            soc = socket.socket(soc_family, socket.SOCK_STREAM)
             soc.setblocking(0)
             err = soc.connect_ex((host, port))
             self.__socs.append(soc)
@@ -67,34 +68,22 @@ class Common(object):
         self.GAE_HTTP       = self.config.get('gae', 'http')
         self.GAE_HTTPS      = self.config.get('gae', 'https')
         self.GAE_PROXY      = dict(re.match(r'^(\w+)://(\S+)$', proxy.strip()).group(1, 2) for proxy in self.config.get('gae', 'proxy').split('|')) if self.config.has_option('gae', 'proxy') else {}
-        self.GAE_IPv6       = self.config.get('gae', 'ipv6') if self.config.has_option('gae', 'ipv6') else ''
         self.GAE_BINDHOSTS  = dict((host, random_choice(self.GAE_HOSTS)) for host in self.config.get('gae', 'bindhosts').split('|')) if self.config.has_option('gae', 'bindhosts') else {}
         logging.debug('map bindhosts to %r', self.GAE_BINDHOSTS)
         self.select_gae_ip_lock = thread.allocate_lock()
-        if self.GAE_IPv6:
-            gae_port = 80
-            gae_ip = '[%s]' % socket.getaddrinfo(self.GAE_IPv6, gae_port, socket.AF_INET6)[0][-1][0]
-            self.GAE_IP = gae_ip
-            self.GAE_SERVERS = ['http://%s/%s' % (x, self.GAE_PATH.lstrip('/')) for x in self.GAE_HOSTS]
-            self.GAE_SERVER_RAW = 'http://%s/%s' % (gae_ip, self.GAE_PATH.lstrip('/'))
-        else:
-            try:
-                self.select_gae_ip(self.GAE_VERIFY)
-            except RuntimeError, e:
-                logging.exception('Common.select_gae_ip failed: %s, try switch to https mode.\n' % str(e))
-                self.GAE_PREFER = 'https'
-                self.select_gae_ip(0 if common.GAE_PROXY else 1)
+        try:
+            self.select_gae_ip(self.GAE_VERIFY)
+        except RuntimeError, e:
+            logging.exception('Common.select_gae_ip failed: %s, try switch to https mode.\n' % str(e))
+            self.GAE_PREFER = 'https'
+            self.select_gae_ip(0 if common.GAE_PROXY else 1)
 
     def select_gae_ip(self, verify):
         '''select a available fetch server ip from proxy.ini ip list'''
         scheme = self.GAE_PREFER
         schemeval = {'http':self.GAE_HTTP, 'https':self.GAE_HTTPS}[scheme]
-        try:
-            hosts = schemeval.split(':')[0].split('|')
-            port  = int(schemeval.split(':')[1])
-        except IndexError:
-            hosts = schemeval.split('|')
-            port  = {'http':80, 'https':443}[scheme]
+        hosts = schemeval.split('|')
+        port  = {'http':80, 'https':443}[scheme]
         random.shuffle(hosts)
         if verify:
             for hosts in  [hosts[i:i+RandomTCPConnection.CONNECT_COUNT] for i in xrange(0,len(hosts),RandomTCPConnection.CONNECT_COUNT)]:
