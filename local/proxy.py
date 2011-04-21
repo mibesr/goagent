@@ -66,6 +66,7 @@ class Common(object):
         self.GAE_HTTP       = self.config.get('gae', 'http')
         self.GAE_HTTPS      = self.config.get('gae', 'https')
         self.GAE_PROXY      = dict(re.match(r'^(\w+)://(\S+)$', proxy.strip()).group(1, 2) for proxy in self.config.get('gae', 'proxy').split('|')) if self.config.has_option('gae', 'proxy') else {}
+        self.GAE_PROXYAUTH  = dict(re.match(r'^(\w+)://(\S+)$', auth.strip()).group(1, 2) for auth in self.config.get('gae', 'proxyauth').split('|')) if self.config.has_option('gae', 'proxyauth') else {}
         self.GAE_IPv6       = self.config.get('gae', 'ipv6') if self.config.has_option('gae', 'ipv6') else ''
         self.GAE_BINDHOSTS  = dict((host, random_choice(self.GAE_HOSTS)) for host in self.config.get('gae', 'bindhosts').split('|')) if self.config.has_option('gae', 'bindhosts') else {}
         logging.debug('map bindhosts to %r', self.GAE_BINDHOSTS)
@@ -287,20 +288,36 @@ class GaeFetcher(BaseFetcher):
     fetchTimeout = 5
     FR_Headers = ('', 'host', 'vary', 'via', 'x-forwarded-for', 'proxy-authorization', 'proxy-connection', 'upgrade', 'keep-alive')
 
+    def _opener(self):
+        opener = urllib2.build_opener()
+        if not common.GAE_PROXY:
+            opener.add_handler(urllib2.ProxyHandler({}))
+        else:
+            opener.add_handler(urllib2.ProxyHandler(common.GAE_PROXY))
+            if common.GAE_PROXYAUTH:
+                if 'basic' in common.GAE_PROXYAUTH:
+                    proxy_password_manager = urllib2.HTTPPasswordMgrWithDefaultRealm()
+                    proxyurl = 'http://%s' % common.GAE_PROXY['http']
+                    username, password = common.GAE_PROXYAUTH['basic'].split(':')
+                    proxy_password_manager.add_password(None, proxyurl, username, password)
+                    opener.add_handler(urllib2.ProxyBasicAuthHandler(proxy_password_manager))
+                elif 'ntlm' in common.GAE_PROXYAUTH:
+                    pass
+        return opener
+
     def _fetch(self, url, method, headers, payload):
         errors = []
         params = gae_encode_data({'url':url, 'method':method, 'headers':headers, 'payload':payload})
         params = zlib.compress(params)
         for i in range(1, 3):
-            proxy_handler = urllib2.ProxyHandler(common.GAE_PROXY)
-            gae_server, gae_host = common.select_fetchserver(url)
-            logging.debug('GaeFetcher fetch %r from (%r, %r)', url, gae_host, gae_server)
-            request = urllib2.Request(gae_server, params)
-            request.add_header('Host', gae_host)
-            request.add_header('Content-Type', 'application/octet-stream')
             try:
                 continued, selected = 0, ''
-                response = urllib2.build_opener(proxy_handler).open(request)
+                gae_server, gae_host = common.select_fetchserver(url)
+                logging.debug('GaeFetcher fetch %r from (%r, %r)', url, gae_host, gae_server)
+                request = urllib2.Request(gae_server, params)
+                request.add_header('Host', gae_host)
+                request.add_header('Content-Type', 'application/octet-stream')
+                response = self._opener().open(request)
                 data = response.read()
                 response.close()
             except urllib2.HTTPError, e:
