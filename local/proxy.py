@@ -9,6 +9,7 @@ import httplib, urllib2, urlparse, socket, select
 import thread, BaseHTTPServer, SocketServer
 import ConfigParser
 import ssl, OpenSSL
+#import ntlm.HTTPNtlmAuthHandler
 
 __version__ = 'beta'
 __author__ =  'phus.lu@gmail.com'
@@ -283,27 +284,27 @@ def gae_encode_data(dic):
 def gae_decode_data(qs):
     return dict((k, v.decode('hex')) for k, v in (x.split('=') for x in qs.split('&')))
 
+def build_openner():
+    opener = urllib2.build_opener()
+    if not common.GAE_PROXY:
+        opener.add_handler(urllib2.ProxyHandler({}))
+    else:
+        opener.add_handler(urllib2.ProxyHandler(common.GAE_PROXY))
+        if common.GAE_PROXYAUTH:
+            if 'basic' in common.GAE_PROXYAUTH:
+                proxy_password_manager = urllib2.HTTPPasswordMgrWithDefaultRealm()
+                proxyurl = 'http://%s' % common.GAE_PROXY['http']
+                username, password = common.GAE_PROXYAUTH['basic'].split(':')
+                proxy_password_manager.add_password(None, proxyurl, username, password)
+                opener.add_handler(urllib2.ProxyBasicAuthHandler(proxy_password_manager))
+            elif 'ntlm' in common.GAE_PROXYAUTH:
+                pass
+    return opener
+
 class GaeFetcher(BaseFetcher):
     partSize = 1024000
     fetchTimeout = 5
     FR_Headers = ('', 'host', 'vary', 'via', 'x-forwarded-for', 'proxy-authorization', 'proxy-connection', 'upgrade', 'keep-alive')
-
-    def _opener(self):
-        opener = urllib2.build_opener()
-        if not common.GAE_PROXY:
-            opener.add_handler(urllib2.ProxyHandler({}))
-        else:
-            opener.add_handler(urllib2.ProxyHandler(common.GAE_PROXY))
-            if common.GAE_PROXYAUTH:
-                if 'basic' in common.GAE_PROXYAUTH:
-                    proxy_password_manager = urllib2.HTTPPasswordMgrWithDefaultRealm()
-                    proxyurl = 'http://%s' % common.GAE_PROXY['http']
-                    username, password = common.GAE_PROXYAUTH['basic'].split(':')
-                    proxy_password_manager.add_password(None, proxyurl, username, password)
-                    opener.add_handler(urllib2.ProxyBasicAuthHandler(proxy_password_manager))
-                elif 'ntlm' in common.GAE_PROXYAUTH:
-                    pass
-        return opener
 
     def _fetch(self, url, method, headers, payload):
         errors = []
@@ -317,7 +318,7 @@ class GaeFetcher(BaseFetcher):
                 request = urllib2.Request(gae_server, params)
                 request.add_header('Host', gae_host)
                 request.add_header('Content-Type', 'application/octet-stream')
-                response = self._opener().open(request)
+                response = build_openner().open(request)
                 data = response.read()
                 response.close()
             except urllib2.HTTPError, e:
