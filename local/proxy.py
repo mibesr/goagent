@@ -290,11 +290,12 @@ class GaeFetcher(BaseFetcher):
                 request = urllib2.Request(gae_server, params)
                 request.add_header('Host', gae_host)
                 request.add_header('Content-Type', 'application/octet-stream')
-                if not common.GAE_PROXY:
-                    handlers = [urllib2.ProxyHandler({})]
-                else:
-                    handlers = [urllib2.ProxyHandler(common.GAE_PROXY), urllib2.HTTPBasicAuthHandler()]
-                response = urllib2.build_opener(*handlers).open(request)
+##                if not common.GAE_PROXY:
+##                    handlers = [urllib2.ProxyHandler({})]
+##                else:
+##                    handlers = [urllib2.ProxyHandler(common.GAE_PROXY), urllib2.ProxyBasicAuthHandler()]
+##                response = urllib2.build_opener(*handlers).open(request)
+                response = urllib2.build_opener(urllib2.ProxyHandler(common.GAE_PROXY)).open(request)
                 data = response.read()
                 response.close()
             except urllib2.HTTPError, e:
